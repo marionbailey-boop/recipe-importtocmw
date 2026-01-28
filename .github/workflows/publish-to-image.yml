@@ -1,0 +1,67 @@
+name: Auto Publish Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up auto version
+        id: version
+        run: |
+          git fetch --tags --force --prune origin
+          DATE=$(date +'%Y.%m.%d')
+          COUNT=$(git tag --list "v${DATE}.*" | wc -l)
+          NEXT=$((COUNT + 1))
+          VERSION="v${DATE}.${NEXT}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: CalcMenu-Cloud
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Derive lowercase repository slug
+        id: repo
+        shell: bash
+        run: |
+          echo "repo_lc=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo.outputs.repo_lc }}:latest
+            ghcr.io/${{ steps.repo.outputs.repo_lc }}:${{ steps.version.outputs.version }}
+
+      - name: Create and push git tag (idempotent)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          if git ls-remote --tags origin "refs/tags/${VERSION}" | grep -q "${VERSION}"; then
+            echo "Tag ${VERSION} already exists remotely. Skipping."
+            exit 0
+          fi
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git tag "${VERSION}"
+          git push origin "${VERSION}"
