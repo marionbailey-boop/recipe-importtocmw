@@ -1,10 +1,10 @@
+import os
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic_core import ValidationError as PydanticValidationError
 
 from db.session import db_cursor
-from db.connection import CONNECTION_STRING
 
 from app.schemas.api import ConvertRequest, ConvertResponse, APIUsage
 from app.utils.errors import ValidationError as AppValidationError, MappingError, DownstreamError
@@ -58,8 +58,15 @@ def read_root():
 @app.get("/health")
 def health():
     try:
-        with db_cursor() as cursor:
-            cursor.execute("SELECT 1")
+        api_key = os.getenv("CMWEB_APIKEY")
+        if api_key:
+            with get_connection(api_key) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+        else:
+            with db_cursor() as cursor:
+                cursor.execute("SELECT 1")
         return {"status": "healthy"}
     except Exception as e:
         raise HTTPException(

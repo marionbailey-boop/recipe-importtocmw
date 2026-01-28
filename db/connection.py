@@ -48,7 +48,7 @@ def build_connection_string() -> str:
     )
 
 
-CONNECTION_STRING = build_connection_string()
+CONNECTION_STRING: Optional[str] = None
 
 _CACHED_CONNECTION_STRING: Optional[str] = None
 
@@ -62,11 +62,15 @@ def fetch_conn_str(apikey: str) -> str:
 
 def get_connection(apikey: Optional[str] = None) -> pyodbc.Connection:
     global _CACHED_CONNECTION_STRING
+    global CONNECTION_STRING
 
     key = apikey or os.getenv("CMWEB_APIKEY")
     if key:
         if _CACHED_CONNECTION_STRING is None:
             _CACHED_CONNECTION_STRING = fetch_conn_str(key)
         return pyodbc.connect(_CACHED_CONNECTION_STRING)
+
+    if CONNECTION_STRING is None:
+        CONNECTION_STRING = build_connection_string()
 
     return pyodbc.connect(CONNECTION_STRING)
