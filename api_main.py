@@ -7,6 +7,11 @@ from db.connection import CONNECTION_STRING
 from app.schemas.api import ConvertRequest, ConvertResponse, APIUsage
 from app.utils.errors import ValidationError as AppValidationError, MappingError, DownstreamError
 
+from app.schemas.nooko_recipe_output import RecipeOutput, RecipeJson
+from app.mapping.cmweb_template_mapper import map_nooko_recipe_to_cmweb_rows
+from app.services.cmweb_import_service import import_nooko_rows_to_cmweb
+from db.connection import get_connection  # or your existing DB getter
+
 
 SERVICE_ID = "recipe-convert-into-cmweb"
 
@@ -14,6 +19,27 @@ app = FastAPI(
     title="Recipe Import (Nooko into CMWeb)",
     version="1.0.0",
 )
+
+@app.post("/recipes/import/nooko-to-cmweb")
+def import_recipe(payload: RecipeOutput):
+    if not payload.is_recipe:
+        return {"imported": False, "reply": payload.response_plain}
+
+    recipe: RecipeJson = payload.recipe_json
+    rows = map_nooko_recipe_to_cmweb_rows(recipe)
+
+    with get_connection() as conn:
+        id_main = import_nooko_rows_to_cmweb(
+            conn=conn,
+            rows=rows,
+            file_name="recipes to import TEST",
+            code_site=1,
+            code_user=1,
+            site_language=1,
+        )
+
+    return {"imported": True, "idMain": id_main, "staged_rows": len(rows)}
+
 
 @app.get("/")
 def read_root():
