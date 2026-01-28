@@ -24,22 +24,26 @@ def exec_usp_recipeimport_xls_and_get_idmain(
     code_user: int = 1,
     site_language: int = 1,
 ) -> int:
-    """
-    Calls the SP like the example and returns IdMain.
-    Using DECLARE + SELECT avoids OUTPUT param handling issues in pyodbc.
-    """
-    sql = """
-    DECLARE @IdMain INT;
+    """Call dbo.usp_RecipeImport_xls and return the *first* resultset's IDMain.
 
+    Important:
+    - dbo.usp_RecipeImport_xls (as provided) **does not** have an OUTPUT parameter.
+      It returns IDMain via the first SELECT in the procedure.
+    - The procedure returns multiple result sets (IDMain, InvalidCount, InvalidReport),
+      so we must advance through remaining sets to avoid "connection is busy" errors
+      before executing the next statement.
+    """
+
+    sql = """
     EXEC dbo.usp_RecipeImport_xls
       @FileName = ?,
       @CompareByName = 1,
       @CompareIngredientByName = 1,
-      @CodeSite = 1,
+      @CodeSite = ?,
       @CodeSetPrice = 1,
       @CodeTrans = 1,
-      @CodeUser = 1,
-      @SiteLanguage = 1,
+      @CodeUser = ?,
+      @SiteLanguage = ?,
       @OverwriteNumber = 1,
       @OverwriteName = 1,
       @OverwriteSubname = 1,
@@ -54,16 +58,24 @@ def exec_usp_recipeimport_xls_and_get_idmain(
       @OverwriteIngredient = 1,
       @OverwriteProcedure = 1,
       @OverwriteKeyword = 1,
-      @OverwriteAllergen = 1,
-      @IdMain = @IdMain OUTPUT;
-
-    SELECT @IdMain AS IdMain;
+      @OverwriteAllergen = 1;
     """
+
     cursor.execute(sql, (file_name, code_site, code_user, site_language))
+
+    # Result set 1: SELECT @IDMain as IDMain
     row = cursor.fetchone()
     if not row or row[0] is None:
-        raise RuntimeError("usp_RecipeImport_xls did not return IdMain")
-    return int(row[0])
+        raise RuntimeError("usp_RecipeImport_xls did not return IDMain in the first result set")
+
+    id_main = int(row[0])
+
+    # Consume/skip remaining result sets so we can execute the next statement safely.
+    while cursor.nextset():
+        # We don't need these results in the API right now.
+        pass
+
+    return id_main
 
 
 def exec_usp_importrecipe(cursor: pyodbc.Cursor, id_main: int) -> None:

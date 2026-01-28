@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Dict, Optional
 from enum import Enum
 
@@ -28,7 +28,7 @@ class APIUsageCall(BaseModel):
     error_type: Optional[str] = None
 
 class APIUsage(BaseModel):
-    calls: list[APIUsageCall] = []        
+    calls: list[APIUsageCall] = Field(default_factory=list)
 
 class ConvertResponse(BaseModel):
     success: bool

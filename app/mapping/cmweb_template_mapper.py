@@ -26,9 +26,9 @@ def map_nooko_recipe_to_cmweb_rows(recipe: RecipeJson) -> List[TemplateRow]:
     # --- Header block (fixed labels) ---
     rows.append(_row("Recipe", "Name", recipe.title, "", "", "", "", ""))
 
-    # Nooko schema does not provide Recipe Number (calcmenu_reference must remain empty),
-    # so we stage blank unless you later add a rule externally.
-    rows.append(_row("", "Number", "", "", "", "", "", ""))
+    # If Nooko provides a recipe number/reference, stage it; otherwise leave blank.
+    recipe_number = getattr(getattr(recipe, "calcmenu_reference", None), "recipe_number", "") or ""
+    rows.append(_row("", "Number", recipe_number, "", "", "", "", ""))
 
     # Yield: screenshot has qty in col3 and unit in col4. We map servings -> qty, unit fixed "serving".
     rows.append(_row("", "Yield", recipe.servings, "serving", "", "", "", ""))
