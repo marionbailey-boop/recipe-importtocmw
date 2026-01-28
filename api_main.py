@@ -1,3 +1,5 @@
+from typing import Any, Dict, Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic_core import ValidationError as PydanticValidationError
 
@@ -20,22 +22,29 @@ app = FastAPI(
     version="1.0.0",
 )
 
-@app.post("/recipes/import/nooko-to-cmweb")
-def import_recipe(payload: RecipeOutput):
+def _import_recipe_into_cmweb(
+    payload: RecipeOutput,
+    *,
+    api_key: Optional[str] = None,
+    file_name: str = "recipes to import TEST",
+    code_site: int = 1,
+    code_user: int = 1,
+    site_language: int = 1,
+) -> Dict[str, Any]:
     if not payload.is_recipe:
         return {"imported": False, "reply": payload.response_plain}
 
     recipe: RecipeJson = payload.recipe_json
     rows = map_nooko_recipe_to_cmweb_rows(recipe)
 
-    with get_connection() as conn:
+    with get_connection(api_key) as conn:
         id_main = import_nooko_rows_to_cmweb(
             conn=conn,
             rows=rows,
-            file_name="recipes to import TEST",
-            code_site=1,
-            code_user=1,
-            site_language=1,
+            file_name=file_name,
+            code_site=code_site,
+            code_user=code_user,
+            site_language=site_language,
         )
 
     return {"imported": True, "idMain": id_main, "staged_rows": len(rows)}
@@ -59,27 +68,26 @@ def health():
         )
 
 
-# Convert Nooko to CMWeb, Call Benj SP 
-@app.post("/recipes/import/nooko-to-cmw", response_model=ConvertResponse)
-def recipe_convert_into_cmc(req: ConvertRequest):
+# Main endpoint aligned with other/api_main.py
+@app.post("/ImportRecipeIntoCMWEB", response_model=ConvertResponse)
+def ImportRecipeIntoCMWEB(req: ConvertRequest):
     usage = APIUsage(calls=[])
 
     try:
+        payload = RecipeOutput.model_validate(req.nooko_json)
+        result = _import_recipe_into_cmweb(payload, api_key=req.api_key)
 
-        # Nooko to CMW
-
-        # Import Converted Json to Benj by calling SP
-
+        message = "Imported successfully." if result.get("imported") else "No recipe to import."
         return ConvertResponse(
             success=True,
-            message="Mapped and imported successfully.",
-            result={},
+            message=message,
+            result=result,
             API_Usage=usage,
         )
 
     except (PydanticValidationError, AppValidationError, MappingError) as e:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail={"error": str(e), "API_Usage": usage.model_dump()},
         )
 
@@ -94,5 +102,3 @@ def recipe_convert_into_cmc(req: ConvertRequest):
             status_code=500,
             detail={"error": str(e), "API_Usage": usage.model_dump()},
         )
-
-
